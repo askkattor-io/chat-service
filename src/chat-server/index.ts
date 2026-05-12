@@ -36,6 +36,10 @@ wss.on("connection", async (client, req) => {
       JSON.stringify({ text: msg.toString(), timestamp: Date.now() }),
     );
   });
+
+  client.on("close", () => {
+    roomManager.leaveRoom(room, client);
+  });
 });
 
 const rooms = AVAILABLE_ROOMS.map((v) => `chat:${v}`);
