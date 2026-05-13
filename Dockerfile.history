@@ -1,0 +1,24 @@
+ARG NODE_VERSION=24.13.0
+FROM node:${NODE_VERSION}-alpine AS base
+WORKDIR /usr/src/app
+
+# Stage 1: install ALL deps and build TS
+FROM base AS build
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: install only prod deps (no devDependencies)
+FROM base AS deps
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Stage 3: final runtime image
+FROM base AS final
+ENV NODE_ENV=production
+USER node
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY --from=build /usr/src/app/dist ./dist
+EXPOSE 3001
+CMD ["node", "dist/history-service/index.js"]
