@@ -2,19 +2,27 @@ ARG NODE_VERSION=24.13.0
 FROM node:${NODE_VERSION}-alpine AS base
 WORKDIR /usr/src/app
 
-# Stage 1: install ALL deps and build TS
+# Stage: development — runs tsx watch for hot reload
+FROM base AS development
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+EXPOSE 3000
+CMD ["npx", "tsx", "watch", "src/chat-server/index.ts"]
+
+# Stage: build — compiles TS to JS for production
 FROM base AS build
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: install only prod deps (no devDependencies)
+# Stage: deps — production-only dependencies
 FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# Stage 3: final runtime image
+# Stage: final — minimal production runtime
 FROM base AS final
 ENV NODE_ENV=production
 USER node

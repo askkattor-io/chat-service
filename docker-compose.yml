@@ -29,8 +29,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.chat
+      target: development
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       REDIS_HOST: redis
       REDIS_PORT: 6379
       HISTORY_SERVICE_URL: http://history-service:3001
@@ -41,13 +42,21 @@ services:
         condition: service_healthy
       history-service:
         condition: service_started
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /usr/src/app/src
+        - action: rebuild
+          path: ./package.json
 
   history-service:
     build:
       context: .
       dockerfile: Dockerfile.history
+      target: development
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       REDIS_HOST: redis
       REDIS_PORT: 6379
       PG_HOST: postgres
@@ -62,6 +71,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /usr/src/app/src
+        - action: rebuild
+          path: ./package.json
 
 volumes:
   postgres-data:
