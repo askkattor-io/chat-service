@@ -20,7 +20,7 @@ services:
     expose:
       - 5432
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chat"]
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat_history"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -64,6 +64,8 @@ services:
       PG_USER: chat
       PG_PASSWORD: chat
       PG_DATABASE: chat_history
+      SERVER_HOST: localhost
+      SERVER_PORT: 3001
     ports:
       - "3001:3001"
     depends_on:

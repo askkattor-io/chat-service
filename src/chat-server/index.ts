@@ -3,8 +3,13 @@ import { WebSocketServer } from "ws";
 import { Redis } from "ioredis";
 import { AVAILABLE_ROOMS, isRoom, Room, roomManager } from "./room-manager.js";
 
-const redisClient = new Redis();
-const redisClientXRead = new Redis();
+const redisOpts = {
+  host: process.env.REDIS_HOST ?? "localhost",
+  port: Number(process.env.REDIS_PORT ?? 6379),
+};
+
+const redisClient = new Redis(redisOpts);
+const redisClientXRead = new Redis(redisOpts);
 
 const host = "localhost";
 const port = 3000;

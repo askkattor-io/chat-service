@@ -21,6 +21,7 @@
   "homepage": "https://github.com/askkattor-io/chat-service#readme",
   "devDependencies": {
     "@types/node": "^25.7.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
