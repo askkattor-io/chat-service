@@ -11,8 +11,8 @@ const redisOpts = {
 const redisClient = new Redis(redisOpts);
 const redisClientXRead = new Redis(redisOpts);
 
-const host = "localhost";
-const port = 3000;
+const host = process.env.HOST ?? "localhost";
+const port = Number(process.env.PORT ?? 3000);
 
 const server = createServer((req, res) => {
   res.write("hello");
@@ -45,6 +45,18 @@ wss.on("connection", async (client, req) => {
   client.on("close", () => {
     roomManager.leaveRoom(room, client);
   });
+
+  try {
+    const res = await fetch(
+      `${process.env.HISTORY_SERVICE_URL}/history/${room}?limit=50`,
+    );
+    const { data } = await res.json();
+    client.send(JSON.stringify({ type: "history", messages: data }));
+  } catch (error) {
+    client.send(
+      JSON.stringify({ type: "error", messages: "Error fetching history" }),
+    );
+  }
 });
 
 const rooms = AVAILABLE_ROOMS.map((v) => `chat:${v}`);
