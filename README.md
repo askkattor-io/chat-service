@@ -30,16 +30,7 @@ When a client connects, the chat server fetches the room history from the histor
 docker compose up --watch
 ```
 
-This starts Redis, Postgres, the chat server (port 3000), and the history service (port 3001). The `--watch` flag enables hot reload — save a file, the relevant service restarts automatically.
-
-## Services
-
-| Service         | Port            | Scales?                                           |
-| --------------- | --------------- | ------------------------------------------------- |
-| chat-server     | 3000            | Yes — each instance reads/writes Redis Streams    |
-| history-service | 3001            | No — single instance to avoid duplicate DB writes |
-| Redis           | 6379            | —                                                 |
-| Postgres        | 5432 (internal) | —                                                 |
+This starts Redis, Postgres, the chat server (port 3000), and the history service (port 3001). The `--watch` flag enables hot reload — save a file, the relevant service restarts automatically. |
 
 ## Rooms
 
@@ -52,5 +43,3 @@ Connect via WebSocket at `ws://localhost:3000/{room}`.
 ```bash
 kubectl apply -f k8s/manifests.yaml
 ```
-
-Replace `emiliusk` in `k8s/manifests.yaml` with your actual Docker Hub username before applying.
