@@ -4,7 +4,7 @@ A multiroom real-time chat app built as an exercise from Chapter 13 of Node.js D
 
 ## Architecture
 
-![System Architecture](architecture.png)
+<img width="1401" height="709" alt="Screenshot 2026-05-15 at 8 30 16" src="https://github.com/user-attachments/assets/bbb81b89-daac-4ad3-968d-1c0e6bd03a20" />
 
 The core idea: WebSocket connections are stateful, which means you can't just throw more servers at the problem. If two users are connected to different server instances, they won't see each other's messages unless those instances are talking to each other.
 
