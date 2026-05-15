@@ -1,0 +1,371 @@
+# ========================================
+# Namespace
+# ========================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chat-service
+
+---
+# ========================================
+# ConfigMap - non-sensitive config
+# ========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chat-config
+  namespace: chat-service
+data:
+  NODE_ENV: production
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  PG_HOST: postgres
+  PG_PORT: "5432"
+  PG_DATABASE: chat_history
+  PG_USER: chat
+  HISTORY_SERVICE_URL: http://history-service:3001
+  PORT: "3000"
+  SERVER_PORT: "3001"
+
+---
+# ========================================
+# Secret - sensitive values (base64 encoded)
+# ========================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chat-secrets
+  namespace: chat-service
+type: Opaque
+data:
+  pg-password: Y2hhdA== # base64 of "chat" — change for production
+
+---
+# ========================================
+# Redis Deployment
+# ========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: chat-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          livenessProbe:
+            exec:
+              command: [redis-cli, ping]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# ========================================
+# Redis Service
+# ========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: chat-service
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+---
+# ========================================
+# Postgres PersistentVolumeClaim
+# ========================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: chat-service
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# ========================================
+# Postgres Deployment
+# ========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: chat-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: chat-config
+                  key: PG_DATABASE
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: chat-config
+                  key: PG_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chat-secrets
+                  key: pg-password
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, chat, -d, chat_history]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, chat, -d, chat_history]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+# ========================================
+# Postgres Service
+# ========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: chat-service
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+---
+# ========================================
+# History Service Deployment
+# — single replica intentionally: multiple
+#   instances would duplicate Postgres writes
+# ========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: history-service
+  namespace: chat-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: history-service
+  template:
+    metadata:
+      labels:
+        app: history-service
+    spec:
+      containers:
+        - name: history-service
+          image: emiliusk/chat-service-history-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: chat-config
+          env:
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chat-secrets
+                  key: pg-password
+          livenessProbe:
+            tcpSocket:
+              port: 3001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+
+---
+# ========================================
+# History Service - Service
+# ========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: history-service
+  namespace: chat-service
+spec:
+  type: ClusterIP
+  selector:
+    app: history-service
+  ports:
+    - port: 3001
+      targetPort: 3001
+
+---
+# ========================================
+# Chat Server Deployment
+# ========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-server
+  namespace: chat-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: chat-server
+  template:
+    metadata:
+      labels:
+        app: chat-server
+    spec:
+      containers:
+        - name: chat-server
+          image: emiliusk/chat-service-chat-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: chat-config
+          env:
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chat-secrets
+                  key: pg-password
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+
+---
+# ========================================
+# Chat Server - Service
+# ========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-server
+  namespace: chat-service
+spec:
+  type: ClusterIP
+  selector:
+    app: chat-server
+  ports:
+    - port: 80
+      targetPort: 3000
+
+---
+# ========================================
+# Ingress - WebSocket requires extended
+# timeouts so connections aren't killed
+# after the default 60s nginx timeout
+# ========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chat-ingress
+  namespace: chat-service
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  rules:
+    - host: yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chat-server
+                port:
+                  number: 80
+
+---
+# ========================================
+# HorizontalPodAutoscaler - chat-server only
+# history-service stays at 1 replica
+# ========================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chat-server-hpa
+  namespace: chat-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chat-server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
